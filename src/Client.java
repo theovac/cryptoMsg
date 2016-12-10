@@ -1,12 +1,17 @@
-import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
+import sun.misc.BASE64Encoder;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.math.BigInteger;
 import java.net.Socket;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.RSAPublicKeySpec;
 import java.util.Scanner;
 import java.util.concurrent.RunnableFuture;
+import java.security.*;
+import javax.crypto.*;
 
 /**
  * Created by theovac on 11/29/16.
@@ -16,15 +21,22 @@ public class Client {
     Socket clientSocket;
     BufferedReader in;
     PrintWriter out;
+    KeyPair keys;
 
-    public Client() throws IOException{
+    public Client() throws IOException, NoSuchAlgorithmException, java.security.spec.InvalidKeySpecException{
 
         // Get the server IP
         System.out.println("Enter server IP: ");
         String serverIP = new String(userInput.next());
 //        System.out.println("-DEBUG- Got server IP: " + serverIP);
-
-        // Initialize socket and I/O streams for the clients
+        try {
+            keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+        } catch (NoSuchAlgorithmException e) {
+            System.out.println(e);
+        }
+        System.out.println("Private key: \n" + new BASE64Encoder().encode(keys.getPrivate().getEncoded()));
+        System.out.println("Public key: \n" + new BASE64Encoder().encode(keys.getPublic().getEncoded()));
+        // Initialize socket and I/O streams for the clients1
         clientSocket = new Socket(serverIP, 9999);
         in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
         out =  new PrintWriter(clientSocket.getOutputStream(), true);
@@ -33,9 +45,10 @@ public class Client {
 
     // Handles client name setting and message processing.
     public void conHandler() throws IOException{
+        boolean firstTry = true;
+
         while(true) {
             String line = in.readLine();
-            boolean firstTry = true;
 
             if (line.startsWith("set_name")) {
                 if (firstTry) {
@@ -62,7 +75,8 @@ public class Client {
                     public void run() {
                         while (true) {
                             try {
-//                                System.out.println("-DEBUG- Getting message to send.");
+//                              System.out.println("-DEBUG- Getting message to send.");
+                                System.out.print("\n>");
                                 getMessage();
                             } catch (IOException e) {
                                 System.out.println(e);
@@ -75,7 +89,7 @@ public class Client {
             } else if (line.startsWith("message")) {
 //                System.out.println("-DEBUG- Waiting for incoming message." + '\n');
                 // Print incoming messages.
-                System.out.println(line.substring(8) + '\n');
+                System.out.print(line.substring(8) + '\n' + '>');
 
             }
         }
