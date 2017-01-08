@@ -1,8 +1,12 @@
+import sun.misc.BASE64Decoder;
+
 import java.io.*;
 import java.net.*;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.nio.CharBuffer;
+import java.security.KeyFactory;
+import java.security.PublicKey;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.*;
 
 /**
  * A communication protocol where a server handles multiple
@@ -16,10 +20,10 @@ public class Server {
     }
 
     // Names of all the clients in the room
-    public static HashSet<String> names = new HashSet<String>();
+    public static Hashtable<String, String> nameKeyTable = new Hashtable<String, String>();
 
     // Writers to all the clients in the room.
-    public static HashSet<PrintWriter> writers = new HashSet<PrintWriter>();
+    public static Hashtable<String, PrintWriter> nameWriterTable = new Hashtable<String, PrintWriter>();
 
     public static void main(String args[]) throws IOException {
         System.out.println("Server running ...");
@@ -46,15 +50,22 @@ public class Server {
 
     public static class Handler implements Runnable{
         private Socket clientSocket;
-        String name;
+        private String username = null;
+        private String receiverUsername = null;
+        private String publicKeyStr;
+        private X509EncodedKeySpec publicKeyspec;
+        private PublicKey publicKey;
         private BufferedReader in;
         private PrintWriter out;
+        private String rsaHeader = "-----BEGIN RSA PUBLIC KEY-----";
+        private String rsaFooter = "-----END RSA PUBLIC KEY-----";
+
 
         public Handler(Socket clientSocket) {
             this.clientSocket = clientSocket;
         }
 
-        public void run() {
+        public void run(){
 //            System.out.println("-DEBUG- Created Handler object.");
             try {
                 // Create input and output streams for this socket
@@ -64,50 +75,66 @@ public class Server {
                 /* Now the client must choose a unique username. The handler will keep
                   prompting, until a valid username is entered. */
                 while (true) {
-                   // Request the client to set a name.
-//                    System.out.println("-DEBUG- Waiting for name.");
-                    out.println("set_name");
-                    name = in.readLine();
-//                    System.out.println("-DEBUG- Got name: " + name + '\n');
+                    String clientRequest = in.readLine();
+                    System.out.println("DEBUG Client request: " + clientRequest);
+                    // Handle connection request.
+                    if (clientRequest.startsWith("CONNECT")) {
+                        String[] clientRequestList = clientRequest.split("&");
+                        username = clientRequestList[1];
+                        publicKeyStr = readPublicKey();
+                        System.out.println(publicKeyStr);
 
-                    synchronized (names) {
-                        // Check in name is valid
-                        if (!names.contains(name) && name != null) {
-                            names.add(name);
-                            writers.add(out);
-//                            System.out.println("-DEBUG- Name is valid. \n");
-                            out.println("name_accepted");
-                            break;
+                        synchronized (nameKeyTable) {
+                            // If username is valid and unique save it along with the client's public key and respond
+                            // with success response code.
+                            if (!nameKeyTable.contains(username) && username != null) {
+                                nameWriterTable.put(username, out);
+                                nameKeyTable.put(username, ""); // TODO: Save public key instead of empty string.
+
+                                out.println(200);
+                            }
                         }
-//                        System.out.println("-DEBUG- Name is invalid. \n");
-                    }
-                }
-//                System.out.println("-DEBUG-" + writers.size() + " writers added.");
-
-                // The handler broadcasts the clients messages.
-                while (true) {
-                    String input = in.readLine();
-//                    System.out.println("-DEBUG- Input: " + input);
-                    if (input != null && !input.equals(" ")) {
-                        for (PrintWriter writer : writers) {
-                            writer.println("message " + name + ": " + input);
+                    } else if (clientRequest.startsWith("GET")) {
+                        String[] clientRequestList = clientRequest.split("&");
+                        if (clientRequestList[1].equals("userlist")) {
+                            String userlist = String.join("&", nameKeyTable.keySet());
+                            System.out.println("DEBUG Userlist: " + userlist);
+                            out.println(userlist);
                         }
                     }
+                    else if (clientRequest.startsWith("MESSAGE")) {
+                        String[] clientRequestList = clientRequest.split("&");
+                        System.out.println(clientRequestList[1]);
+                        synchronized (nameKeyTable) {
+                            for (String name : nameKeyTable.keySet()) {
+                                System.out.println(name);
+                            }
+                            if (nameKeyTable.keySet().contains(clientRequestList[1])) {
+                                System.out.println("DEBUG Receiver set.");
+                                receiverUsername = clientRequestList[1];
+                                out.println(200);
+                                // TODO: Send receiver's public key to the client.
+                            }
+                        }
+                    } else if (username != null && receiverUsername != null) {
+                        System.out.println("DEBUG User chatting.");
+                        nameWriterTable.get(receiverUsername).println(clientRequest);
+                    }
                 }
-           } catch (IOException e) {
+           } catch (Exception e) {
                System.out.println(e);
            } finally {
                /* This is cleanup code to be executed when the client exits
                   for whatever reason. */
 
                // If the client managed to register a username remove it
-               if (name != null) {
-                   names.remove(name);
+               if (username != null) {
+                   nameKeyTable.remove(username);
                }
 
                // And it's writer
                if (out != null) {
-                   writers.remove(out);
+                   nameWriterTable.remove(username);
                }
 
                // Close the client's socket
@@ -117,6 +144,31 @@ public class Server {
                    System.out.println(e);
                }
            }
+        }
+
+        public String readPublicKey() throws Exception{
+            System.out.println("DEBUG Reading public key.");
+            String line;
+            String publicKey = "";
+            boolean read = false;
+
+            // Read the part of the key between the RSA header and footer
+            while (true) {
+                line = in.readLine();
+                if (line.equals("-----END RSA PUBLIC KEY-----")) {
+                    break;
+                }
+                else if (line.equals("-----BEGIN RSA PUBLIC KEY-----")) {
+                    read = true;
+                }
+                else if (read) {
+                    if (publicKey != "") {
+                        publicKey += '\n';
+                    }
+                    publicKey += line;
+                }
+            }
+            return publicKey;
         }
     }
 }
