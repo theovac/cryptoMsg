@@ -81,7 +81,7 @@ public class Node {
                     break;
                 }
                 if ((serverLine = userInputLines.poll()) != null) {
-                    serverPort = new Scanner(serverLine).nextInt();
+                    serverPort = new Integer(new Scanner(serverLine).next());
                     break;
                 }
             }
@@ -104,7 +104,7 @@ public class Node {
 
 
                 } catch (Exception e) {
-                    System.out.println(e);
+                    e.printStackTrace();
                 }
 
                 // Start messaging
@@ -166,7 +166,7 @@ public class Node {
                         }
                     }
                 } catch (Exception e) {
-                    System.out.println(e);
+                    e.printStackTrace();
                 }
             }
         });
@@ -183,7 +183,7 @@ public class Node {
                 String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(incomingMessage)));
                 System.out.println("\nDecrypted message: \n" + decryptedMessage);
             } catch (Exception e) {
-                System.out.println(e);
+                e.printStackTrace();
             }
         }
     }
