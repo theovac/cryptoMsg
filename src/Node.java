@@ -1,6 +1,7 @@
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.KeyFactory;
@@ -34,7 +35,8 @@ public class Node {
     private static PublicKey partnerPublicKey;
 
     public Node(int port) throws Exception{
-        serverSocket = new ServerSocket(port);
+        InetAddress ip = InetAddress.getLocalHost();
+        serverSocket = new ServerSocket(port, 0, ip);
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
         System.out.println(Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()));
     }
