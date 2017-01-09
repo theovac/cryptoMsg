@@ -33,7 +33,6 @@ public class Client {
     PrivateKey clientPrivateKey;
     Cipher cipher = Cipher.getInstance("RSA");
     Cipher decipher = Cipher.getInstance("RSA");
-    boolean wait = false;
 
     // Keep the public keys of all the clients this client has messaged
     Hashtable<String, String> nameKeyTable = new Hashtable<>();
