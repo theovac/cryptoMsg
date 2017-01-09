@@ -35,8 +35,7 @@ public class Node {
     private static PublicKey partnerPublicKey;
 
     public Node(int port) throws Exception{
-        InetAddress ip = InetAddress.getLocalHost();
-        serverSocket = new ServerSocket(port, 0, ip);
+        serverSocket = new ServerSocket(port);
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
         System.out.println(Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()));
     }
