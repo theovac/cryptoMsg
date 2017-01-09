@@ -1,10 +1,4 @@
-import com.sun.org.apache.xml.internal.dtm.ref.ExpandedNameTable;
-import com.sun.org.apache.xml.internal.security.utils.Base64;
-import sun.misc.BASE64Decoder;
-import sun.misc.BASE64Encoder;
-
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
@@ -16,6 +10,7 @@ import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Queue;
 import java.util.Scanner;
+import java.util.Base64;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import javax.crypto.Cipher;
 
@@ -41,7 +36,7 @@ public class Node {
     public Node(int port) throws Exception{
         serverSocket = new ServerSocket(port);
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-        System.out.println(new BASE64Encoder().encode(keys.getPublic().getEncoded()));
+        System.out.println(Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()));
     }
 
     private static class readSystemIn implements Runnable {
@@ -98,14 +93,14 @@ public class Node {
                     out = new PrintWriter(outClientSocket.getOutputStream(), true);
 
                     // Sends the public key in base64 format to the other node.
-                    String publicKey = new BASE64Encoder().encode(keys.getPublic().getEncoded());
+                    String publicKey = Base64.getEncoder().encodeToString(keys.getPublic().getEncoded());
                     out.println(rsaKeyHeader + '\n' + publicKey + '\n' + rsaKeyFooter);
 
                     // Reads the public key from the connection partner node and decodes it.
                     String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
                     System.out.println(partnerPublicKeyBase64);
                     partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
-                            new X509EncodedKeySpec(Base64.decode(partnerPublicKeyBase64)));
+                            new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
 
 
                 } catch (Exception e) {
@@ -143,10 +138,10 @@ public class Node {
             String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
             System.out.println(partnerPublicKeyBase64);
             partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
-                    new X509EncodedKeySpec(Base64.decode(partnerPublicKeyBase64)));
+                    new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
 
             // Sends the public key in base64 format to the other node.
-            String publicKey = new BASE64Encoder().encode(keys.getPublic().getEncoded());
+            String publicKey = Base64.getEncoder().encodeToString(keys.getPublic().getEncoded());
             out.println(rsaKeyHeader + '\n' + publicKey + '\n' + rsaKeyFooter);
 
         }
@@ -164,7 +159,7 @@ public class Node {
                             // Encrypt the message before sending it.
                             Cipher encryptionCipher = Cipher.getInstance("RSA");
                             encryptionCipher.init(Cipher.PUBLIC_KEY, partnerPublicKey);
-                            String encryptedMessage = new BASE64Encoder().encode(encryptionCipher.doFinal(message.getBytes()));
+                            String encryptedMessage = Base64.getEncoder().encodeToString(encryptionCipher.doFinal(message.getBytes()));
                             System.out.println("\nEncrypted message: \n" + encryptedMessage);
 
                             out.println(rsaMessageHeader + '\n' + encryptedMessage + '\n' + rsaMessageFooter);
@@ -185,7 +180,7 @@ public class Node {
                 Cipher decryptionCipher = Cipher.getInstance("RSA");
                 decryptionCipher.init(Cipher.PRIVATE_KEY, keys.getPrivate());
 
-                String decryptedMessage = new String(decryptionCipher.doFinal(Base64.decode(incomingMessage)));
+                String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(incomingMessage)));
                 System.out.println("\nDecrypted message: \n" + decryptedMessage);
             } catch (Exception e) {
                 System.out.println(e);
