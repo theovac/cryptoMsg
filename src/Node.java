@@ -35,6 +35,7 @@ public class Node {
     private static PublicKey partnerPublicKey;
 
     public Node(int port) throws Exception{
+        //InetAddress ip = InetAddress.getByName("192.168.1.2");
         serverSocket = new ServerSocket(port);
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
         System.out.println(Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()));
@@ -184,7 +185,7 @@ public class Node {
                 String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(incomingMessage)));
                 System.out.println("\nDecrypted message: \n" + decryptedMessage);
             } catch (Exception e) {
-                e.printStackTrace();
+                //e.printStackTrace();
             }
         }
     }
