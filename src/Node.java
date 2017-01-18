@@ -112,7 +112,7 @@ public class Node {
                 }
 
                 // Start messaging
-                initSession();
+                initSession(outClientSocket);
             }
         }
     }
@@ -149,10 +149,10 @@ public class Node {
             out.println(rsaKeyHeader + '\n' + publicKey + '\n' + rsaKeyFooter);
 
         }
-        initSession();
+        initSession(inClientSocket);
     }
 
-    public static void initSession() {
+    public static void initSession(Socket clientSocket) {
         Thread sendMessages = new Thread(new Runnable() {
             String message = null;
             @Override
@@ -185,7 +185,8 @@ public class Node {
                 decryptionCipher.init(Cipher.PRIVATE_KEY, keys.getPrivate());
 
                 String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(incomingMessage)));
-                System.out.println("\nDecrypted message: \n" + decryptedMessage);
+                System.out.println("\nDecrypted message: \n"
+                      + clientSocket.getRemoteSocketAddress().toString() + ": " + decryptedMessage) + "\n>";
             } catch (Exception e) {
                 //e.printStackTrace();
             }
