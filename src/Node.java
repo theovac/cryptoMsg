@@ -38,7 +38,8 @@ public class Node {
         //InetAddress ip = InetAddress.getByName("192.168.1.2");
         serverSocket = new ServerSocket(port);
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-        System.out.println(Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()));
+        System.out.println("\nMy public key: \n" +
+                Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()));
     }
 
     private static class readSystemIn implements Runnable {
@@ -103,6 +104,7 @@ public class Node {
                     System.out.println(partnerPublicKeyBase64);
                     partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
                             new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
+                    System.out.println("\nReceived public key: \n" + partnerPublicKeyBase64);
 
 
                 } catch (Exception e) {
