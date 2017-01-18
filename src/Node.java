@@ -145,7 +145,7 @@ public class Node {
             in = new BufferedReader(new InputStreamReader(inClientSocket.getInputStream()));
             out = new PrintWriter(inClientSocket.getOutputStream(), true);
             interrupt = true;
-	    System.out.println("\nConnected to: " + inClientSocket.getRemoteSocketAddress().toString() + 			       "\n");
+	    System.out.println("\nConnected to: " + inClientSocket.getRemoteSocketAddress().toString() + "\n");
 
             // Reads the public key from the connection partner node and decodes it.
             String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
