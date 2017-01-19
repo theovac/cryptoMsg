@@ -36,7 +36,6 @@ public class Node {
     private static boolean demoMode = false;
 
     public Node(int port) throws Exception{
-        //InetAddress ip = InetAddress.getByName("192.168.1.2");
         serverSocket = new ServerSocket(port);
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
 	if (demoMode) {
@@ -93,7 +92,7 @@ public class Node {
             }
             if (!interrupt) {
                 try {
-                    // Create the socket that will be user for messaging and initiate reader and writer for it.
+                    // Create the socket that will be used for messaging and initiate reader and writer for it.
                     outClientSocket = new Socket(serverIP, serverPort);
                     in = new BufferedReader(new InputStreamReader(outClientSocket.getInputStream()));
                     out = new PrintWriter(outClientSocket.getOutputStream(), true);
