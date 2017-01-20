@@ -144,12 +144,15 @@ public class Node {
             in = new BufferedReader(new InputStreamReader(inClientSocket.getInputStream()));
             out = new PrintWriter(inClientSocket.getOutputStream(), true);
             interrupt = true;
-	    System.out.println("\nConnected to: " + inClientSocket.getRemoteSocketAddress().toString() + "\n");
 
             // Reads the public key from the connection partner node and decodes it.
             String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
+            if (demoMode) {
+                System.out.println("\nReceived public key: \n" + partnerPublicKeyBase64);
+            }
             partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
                     new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
+	    System.out.println("\nConnected to: " + inClientSocket.getRemoteSocketAddress().toString() + "\n");
 
             // Sends the public key in base64 format to the other node.
             String publicKey = Base64.getEncoder().encodeToString(keys.getPublic().getEncoded());
