@@ -28,9 +28,7 @@ javac Node.java
 
 Run the program:
 
-```bash
-java Node or java Node verbose for verbose execution.
-```
+`java Node` or `java Node verbose` for verbose execution.
 
 After the above steps you will be prompted for a port on which the server will be instanciated. Make sure it is an unused port. Then, enter a remote server's IP address and port to connect to it.
 
