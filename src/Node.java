@@ -16,13 +16,15 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import javax.crypto.Cipher;
 
 /**
- * Created by theovac on 1/8/17.
+ * This program is an implementation of a simple encrypted communication protocol using
+ * the RSA cryptosystem.  
  */
+
 public class Node {
     public static KeyPair keys;
     private static ServerSocket serverSocket;
-    private static Socket inClientSocket;
-    private static Socket outClientSocket;
+    private static Socket inClientSocket; // Socket created by accepting a connection request.
+    private static Socket outClientSocket; // Socket created by making a connection request.
     private static BufferedReader in;
     private static PrintWriter out;
     private static Scanner scanner = new Scanner(System.in);
@@ -33,12 +35,26 @@ public class Node {
     private static String rsaMessageHeader = "-----BEGIN ENCRYPTED MESSAGE-----";
     private static String rsaMessageFooter = "-----END ENCRYPTED MESSAGE-----";
     private static PublicKey partnerPublicKey;
-    private static boolean demoMode = false;
+    private static boolean verbose = false;
+
+    /*
+     * On the creation of a Node an RSA keypair is generated and the user is prompted to insert a 
+     * port number on which a ServerSocket that listens for and accepts incoming connection requests
+     * is initialized. 
+     *
+     * Then, the user can enter an remote server IP address and port number to create a local socket
+     * that will try to connect to the given server or continue listening. 
+     *
+     * After a connection is estabalished, the Node that started the connection request sends its
+     * public key and the other node responds doing the same. Finally, a session where RSA encrypted 
+     * messages are exchanged begins.
+     */
 
     public Node(int port) throws Exception{
         serverSocket = new ServerSocket(port);
+        // Generate RSA keypair.
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-	if (demoMode) {
+	if (verbose) {
         System.out.println("\nMy public key: \n" +
                 Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()) + '\n');
 	}
@@ -60,7 +76,7 @@ public class Node {
     }
 
     private static class userInitSession implements Runnable {
-        /* Enables the user to connect to a server and start messaging.
+        /* Enables the user to make connection request to a server and start messaging.
            if a connection request to this Node's server socket is accepted, this
            thread is interrupted.
         */
@@ -73,7 +89,7 @@ public class Node {
             // The server's IP and connection port are provided by the user.
             System.out.println("Enter remote server IP: ");
             while (true) {
-                if (interrupt) {
+                if (interrupt) { // Allow the thread to be interrupted.
                     break;
                 }
                 if ((serverIP = userInputLines.poll()) != null) {
@@ -105,7 +121,7 @@ public class Node {
                     String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
                     partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
                             new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
-		    if (demoMode) {
+		    if (verbose) {
                     	System.out.println("\nReceived public key: \n" + partnerPublicKeyBase64);
 		    }
 	    	    System.out.println("\nConnected to: " + outClientSocket.getRemoteSocketAddress().toString());
@@ -115,7 +131,7 @@ public class Node {
                     e.printStackTrace();
                 }
 
-                // Start messaging
+                // Start exchanging messages. 
                 initSession(outClientSocket);
             }
         }
@@ -124,8 +140,8 @@ public class Node {
     public static void main(String[] args) throws Exception {
         Thread readSystemInThread = new Thread(new readSystemIn());
         Thread userInitSessionThread = new Thread(new userInitSession());
-	if (args.length != 0 && args[0].equals("demo")) {
-	    demoMode = true;
+	if (args.length != 0 && args[0].equals("verbose")) {
+	    verbose = true;
 	}
 
         System.out.println("Enter server port: ");
@@ -143,16 +159,16 @@ public class Node {
         if (outClientSocket == null) {
             in = new BufferedReader(new InputStreamReader(inClientSocket.getInputStream()));
             out = new PrintWriter(inClientSocket.getOutputStream(), true);
-            interrupt = true;
+            interrupt = true; // Interrupts userInitSessionThread to avoid conflicts.
 
             // Reads the public key from the connection partner node and decodes it.
             String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
-            if (demoMode) {
+            if (verbose) {
                 System.out.println("\nReceived public key: \n" + partnerPublicKeyBase64);
             }
             partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
                     new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
-	    System.out.println("\nConnected to: " + inClientSocket.getRemoteSocketAddress().toString() + "\n");
+	    System.out.println("\nConnected to: " + inClientSocket.getRemoteSocketAddress().toString() +                                 "\n");
 
             // Sends the public key in base64 format to the other node.
             String publicKey = Base64.getEncoder().encodeToString(keys.getPublic().getEncoded());
@@ -162,19 +178,24 @@ public class Node {
         initSession(inClientSocket);
     }
 
-    public static void initSession(Socket clientSocket) {
+    private static void initSession(Socket clientSocket) {
+	// This method is called after key exchange to handle the message exchange.
         Thread sendMessages = new Thread(new Runnable() {
+            // Reads message from System.in, then encrypts it and sends it
             String message = null;
             @Override
             public void run() {
                 try {
                     while (true) {
                         if ((message = userInputLines.poll()) != null) {
-                            // Encrypt the message before sending it.
+                            // Encrypt the message.
                             Cipher encryptionCipher = Cipher.getInstance("RSA");
                             encryptionCipher.init(Cipher.PUBLIC_KEY, partnerPublicKey);
-                            String encryptedMessage = Base64.getEncoder().encodeToString(encryptionCipher.doFinal(message.getBytes()));
-                            out.println(rsaMessageHeader + '\n' + encryptedMessage + '\n' + rsaMessageFooter);
+                            String encryptedMessage = Base64.getEncoder().encodeToString(
+                                                        encryptionCipher.doFinal(message.getBytes()));
+                            // Write to socket.
+                            out.println(rsaMessageHeader + '\n' + 
+                                        encryptedMessage + '\n' + rsaMessageFooter);
                         }
                     }
                 } catch (Exception e) {
@@ -185,21 +206,26 @@ public class Node {
         sendMessages.start();
 
         while (true) {
+            // Reads incoming messages from the socket, decrypts them and displays them on System.out
             try {
+                // Read message.
                 String incomingMessage = readField(rsaMessageHeader, rsaMessageFooter);
-		if (demoMode) {
+		if (verbose) {
                     System.out.println("\n\nEncrypted message: \n" + incomingMessage + '\n');
 		}
-
+                
+                // Decrypt message.
                 Cipher decryptionCipher = Cipher.getInstance("RSA");
                 decryptionCipher.init(Cipher.PRIVATE_KEY, keys.getPrivate());
-
-                String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(incomingMessage)));
-		if (demoMode) {
+                String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(
+                                                     incomingMessage)));
+		if (verbose) {
                     System.out.print("Decrypted message: \n"
-                          + clientSocket.getRemoteSocketAddress().toString() + ": " + decryptedMessage + '\n');
+                          + clientSocket.getRemoteSocketAddress().toString() + ": " +
+                                                                decryptedMessage + '\n');
 		} else {
-                    System.out.print(clientSocket.getRemoteSocketAddress().toString() + ": " + decryptedMessage + '\n');
+                    System.out.print(clientSocket.getRemoteSocketAddress().toString() + ": " +
+                                      decryptedMessage + '\n');
 		}
 
             } catch (Exception e) {
@@ -208,12 +234,12 @@ public class Node {
         }
     }
 
-    public static String readField(String header, String footer) throws Exception{
+    private static String readField(String header, String footer) throws Exception{
         String line;
         String textField = "";
         boolean read = false;
 
-        // Read the part of the key between the RSA header and footer
+        // Read the given header and footer.
         while (true) {
             line = in.readLine();
             if (line.equals(footer)) {
@@ -222,7 +248,7 @@ public class Node {
                 read = true;
             } else if (read) {
                 if (textField != "") {
-                    textField += '\n';
+                    textField += '\n'; // Add new line characters from pretty printing.
                 }
                 textField += line;
             }
