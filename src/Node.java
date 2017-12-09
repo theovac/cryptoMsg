@@ -1,7 +1,6 @@
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.KeyFactory;
@@ -15,11 +14,19 @@ import java.util.Base64;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import javax.crypto.Cipher;
 
-/**
- * This program is an implementation of a simple encrypted communication protocol using
- * the RSA cryptosystem.  
- */
 
+/**
+ * On the creation of a Node an RSA keypair is generated and the user is prompted to insert a
+ * port number on which a ServerSocket that listens for and accepts incoming connection requests
+ * is initialized.
+ *
+ * Then, the user can enter a remote server IP address and port number to create a local socket
+ * that will try to connect to the given server or continue listening.
+ *
+ * After a connection is established, the Node that started the connection request sends its
+ * public key and the other node responds doing the same. Finally, a session where RSA encrypted
+ * messages are exchanged begins.
+ */
 public class Node {
     public static KeyPair keys;
     private static ServerSocket serverSocket;
@@ -37,33 +44,20 @@ public class Node {
     private static PublicKey partnerPublicKey;
     private static boolean verbose = false;
 
-    /*
-     * On the creation of a Node an RSA keypair is generated and the user is prompted to insert a 
-     * port number on which a ServerSocket that listens for and accepts incoming connection requests
-     * is initialized. 
-     *
-     * Then, the user can enter an remote server IP address and port number to create a local socket
-     * that will try to connect to the given server or continue listening. 
-     *
-     * After a connection is estabalished, the Node that started the connection request sends its
-     * public key and the other node responds doing the same. Finally, a session where RSA encrypted 
-     * messages are exchanged begins.
-     */
-
     public Node(int port) throws Exception{
         serverSocket = new ServerSocket(port);
-        // Generate RSA keypair.
         keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-	if (verbose) {
-        System.out.println("\nMy public key: \n" +
-                Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()) + '\n');
-	}
+        if (verbose) {
+            System.out.println("\nMy public key: \n" +
+                    Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()) + '\n');
+        }
     }
 
     private static class readSystemIn implements Runnable {
-        /* Reads every line typed in the system input and stores it in a queue.
-           We do this so as to be able to use the interruptable Queue.poll() method to get the
-           next input line. */
+        /** Reads every line typed in the system input and stores it in a queue.
+         * We do this so as to be able to use the interruptable Queue.poll() method to get the
+         * next input line.
+         */
         @Override
         public void run() {
             Scanner scanner = new Scanner(System.in);
