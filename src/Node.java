@@ -1,12 +1,11 @@
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.PublicKey;
+import java.security.KeyPair; import java.security.KeyPairGenerator; import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Queue;
 import java.util.Scanner;
@@ -34,211 +33,208 @@ public class Node {
     private static Socket outClientSocket; // Socket created by making a connection request.
     private static BufferedReader in;
     private static PrintWriter out;
-    private static Scanner scanner = new Scanner(System.in);
     private static boolean interrupt = false;
+    private static boolean clientSessionStarted = false;
+    private static boolean serverSessionStarted = false;
     private static Queue<String> userInputLines = new ConcurrentLinkedQueue<>();
+    private static Queue<String> input = new ConcurrentLinkedQueue<>();
     private static String rsaKeyHeader = "-----BEGIN RSA PUBLIC KEY-----";
     private static String rsaKeyFooter = "-----END RSA PUBLIC KEY-----";
     private static String rsaMessageHeader = "-----BEGIN ENCRYPTED MESSAGE-----";
     private static String rsaMessageFooter = "-----END ENCRYPTED MESSAGE-----";
-    private static PublicKey partnerPublicKey;
+    private PublicKey partnerPublicKey;
     private static boolean verbose = false;
 
-    public Node(int port) throws Exception{
-        serverSocket = new ServerSocket(port);
-        keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-        if (verbose) {
-            System.out.println("\nMy public key: \n" +
-                    Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()) + '\n');
+    public Node(int serverPort) throws Exception{
+        this.keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+        ServerThread serverThread = new ServerThread(serverPort);
+        ClientThread clientThread = new ClientThread();
+        Thread readSystemInThread = new Thread(new SystemInReader());
+        readSystemInThread.start();
+        clientThread.start();
+        serverThread.start();
+    }
+
+    private class ServerThread extends Thread {
+        ServerSocket serverSocket;
+        public ServerThread(int port) throws IOException{
+            this.serverSocket = new ServerSocket(port);
+        }
+
+        public void run() {
+            Socket connectionSocket;
+            // Listen for connection requests.
+            try {
+                connectionSocket = this.serverSocket.accept();
+                serverSessionStarted = true;
+
+                if (!clientSessionStarted) {
+                    Thread incomingMessageThread = new IncomingMessageThread(connectionSocket);
+                    Thread outgoingMessageThread = new OutgoingMessageThread(connectionSocket);
+                    incomingMessageThread.start();
+                    outgoingMessageThread.start();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
-    private static class readSystemIn implements Runnable {
+    private class ClientThread extends Thread {
+        public ClientThread(){
+        }
+
+        public void run() {
+            String connectionIP = null;
+            int connectionPort = 0;
+            Socket connectionSocket;
+            String portLine;
+
+            System.out.print("Enter IP to connect to: ");
+            // Read user input and initiate connection.
+            while(!serverSessionStarted) {
+                if ((connectionIP = input.poll()) != null) {
+                    System.out.print("Enter port to connect to: ");
+                    break;
+                }
+            }
+            while(!serverSessionStarted) {
+                if ((portLine = input.poll()) != null) {
+                    connectionPort = new Integer(new Scanner(portLine).next());
+                    break;
+                }
+            }
+            if (!serverSessionStarted) {
+                try {
+                    connectionSocket = new Socket(connectionIP, connectionPort);
+
+                    Thread incomingMessageThread = new IncomingMessageThread(connectionSocket);
+                    incomingMessageThread.start();
+
+                    Thread outgoingMessageThread = new OutgoingMessageThread(connectionSocket);
+                    outgoingMessageThread.start();
+                    clientSessionStarted = true;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private class IncomingMessageThread extends Thread {
+        Socket connectionSocket;
+        BufferedReader inStream;
+        public IncomingMessageThread(Socket connectionSocket) throws IOException{
+            this.connectionSocket = connectionSocket;
+            this.inStream = new BufferedReader(new InputStreamReader(this.connectionSocket.getInputStream()));
+        }
+        public void run() {
+            String message;
+            // RSA key exchange.
+            try {
+            String partnerPublicKeyBase64 = readField(inStream);
+            Node.this.partnerPublicKey = KeyFactory.getInstance("RSA")
+                                      .generatePublic(new X509EncodedKeySpec(Base64.getDecoder()
+                                      .decode(partnerPublicKeyBase64)));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            try {
+                while (true) {
+                        message = readField(this.inStream);
+                        Cipher decryptionCipher = Cipher.getInstance("RSA");
+                        decryptionCipher.init(Cipher.PRIVATE_KEY, keys.getPrivate());
+                        String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(
+                                                            message)));
+                        System.out.println(connectionSocket.getRemoteSocketAddress().toString() +
+                                           ": " + decryptedMessage);
+                }
+            } catch (Exception e) {
+                System.exit(0);
+               e.printStackTrace();
+            }
+        }
+    }
+
+    private class OutgoingMessageThread extends Thread {
+        Socket connectionSocket;
+        PrintWriter outStream;
+
+
+        public OutgoingMessageThread(Socket connectionSocket) throws IOException{
+            this.connectionSocket = connectionSocket;
+            this.outStream = new PrintWriter(this.connectionSocket.getOutputStream(), true);
+        }
+        public void run() {
+            String message;
+            // RSA key exchange.
+            String publicKey = Base64.getEncoder().encodeToString(keys.getPublic().getEncoded());
+            outStream.println(rsaKeyHeader + '\n' + publicKey + '\n' + rsaKeyFooter);
+
+            try {
+                System.out.println("Connected to " +
+                                   connectionSocket.getRemoteSocketAddress().toString() +
+                                   " on port " + connectionSocket.getPort());
+                while (true) {
+                    if (Node.this.partnerPublicKey != null && (message = input.poll()) != null) {
+                        Cipher encryptionCipher = Cipher.getInstance("RSA");
+                        encryptionCipher.init(Cipher.PUBLIC_KEY, Node.this.partnerPublicKey);
+                        String encryptedMessage = Base64.getEncoder().encodeToString(
+                                                  encryptionCipher.doFinal(message.getBytes()));
+                        // Write to socket.
+                        outStream.println(rsaMessageHeader + '\n' +
+                                          encryptedMessage + '\n' + rsaMessageFooter);
+                    }
+                }
+            } catch (Exception e) {
+                System.exit(0);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static class SystemInReader implements Runnable {
         /** Reads every line typed in the system input and stores it in a queue.
          * We do this so as to be able to use the interruptable Queue.poll() method to get the
          * next input line.
          */
+
+        public SystemInReader() {
+        }
+
         @Override
         public void run() {
             Scanner scanner = new Scanner(System.in);
             while(true) {
                 if (scanner.hasNextLine()) {
-                    userInputLines.add(scanner.nextLine());
+                    input.add(scanner.nextLine());
                 }
-            }
-        }
-    }
-
-    private static class userInitSession implements Runnable {
-        /* Enables the user to make connection request to a server and start messaging.
-           if a connection request to this Node's server socket is accepted, this
-           thread is interrupted.
-        */
-        @Override
-        public void run() {
-            String serverIP = null;
-            String serverLine = null;
-            int serverPort = 0;
-
-            // The server's IP and connection port are provided by the user.
-            System.out.println("Enter remote server IP: ");
-            while (true) {
-                if (interrupt) { // Allow the thread to be interrupted.
-                    break;
-                }
-                if ((serverIP = userInputLines.poll()) != null) {
-                    System.out.println("Enter remote server port: ");
-                    break;
-                }
-            }
-            while (true) {
-                if (interrupt) {
-                    break;
-                }
-                if ((serverLine = userInputLines.poll()) != null) {
-                    serverPort = new Integer(new Scanner(serverLine).next());
-                    break;
-                }
-            }
-            if (!interrupt) {
-                try {
-                    // Create the socket that will be used for messaging and initiate reader and writer for it.
-                    outClientSocket = new Socket(serverIP, serverPort);
-                    in = new BufferedReader(new InputStreamReader(outClientSocket.getInputStream()));
-                    out = new PrintWriter(outClientSocket.getOutputStream(), true);
-
-                    // Sends the public key in base64 format to the other node.
-                    String publicKey = Base64.getEncoder().encodeToString(keys.getPublic().getEncoded());
-                    out.println(rsaKeyHeader + '\n' + publicKey + '\n' + rsaKeyFooter);
-
-                    // Reads the public key from the connection partner node and decodes it.
-                    String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
-                    partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
-                            new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
-		    if (verbose) {
-                    	System.out.println("\nReceived public key: \n" + partnerPublicKeyBase64);
-		    }
-	    	    System.out.println("\nConnected to: " + outClientSocket.getRemoteSocketAddress().toString());
-		    System.out.print("\n");
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-
-                // Start exchanging messages. 
-                initSession(outClientSocket);
             }
         }
     }
 
     public static void main(String[] args) throws Exception {
-        Thread readSystemInThread = new Thread(new readSystemIn());
-        Thread userInitSessionThread = new Thread(new userInitSession());
-	if (args.length != 0 && args[0].equals("verbose")) {
-	    verbose = true;
-	}
-
-        System.out.println("Enter server port: ");
-        int port = scanner.nextInt();
-        scanner.nextLine();
-
-        // Initialize Node on the specified port.
-        Node node = new Node(port);
-        readSystemInThread.start();
-        userInitSessionThread.start();
-
-        System.out.println("Server started.");
-
-        inClientSocket = node.serverSocket.accept();
-        if (outClientSocket == null) {
-            in = new BufferedReader(new InputStreamReader(inClientSocket.getInputStream()));
-            out = new PrintWriter(inClientSocket.getOutputStream(), true);
-            interrupt = true; // Interrupts userInitSessionThread to avoid conflicts.
-
-            // Reads the public key from the connection partner node and decodes it.
-            String partnerPublicKeyBase64 = readField(rsaKeyHeader, rsaKeyFooter);
-            if (verbose) {
-                System.out.println("\nReceived public key: \n" + partnerPublicKeyBase64);
-            }
-            partnerPublicKey = KeyFactory.getInstance("RSA").generatePublic(
-                    new X509EncodedKeySpec(Base64.getDecoder().decode(partnerPublicKeyBase64)));
-	    System.out.println("\nConnected to: " + inClientSocket.getRemoteSocketAddress().toString() +                                 "\n");
-
-            // Sends the public key in base64 format to the other node.
-            String publicKey = Base64.getEncoder().encodeToString(keys.getPublic().getEncoded());
-            out.println(rsaKeyHeader + '\n' + publicKey + '\n' + rsaKeyFooter);
-
-        }
-        initSession(inClientSocket);
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter server port:");
+        Node baseNode = new Node(scanner.nextInt());
     }
 
-    private static void initSession(Socket clientSocket) {
-	// This method is called after key exchange to handle the message exchange.
-        Thread sendMessages = new Thread(new Runnable() {
-            // Reads message from System.in, then encrypts it and sends it
-            String message = null;
-            @Override
-            public void run() {
-                try {
-                    while (true) {
-                        if ((message = userInputLines.poll()) != null) {
-                            // Encrypt the message.
-                            Cipher encryptionCipher = Cipher.getInstance("RSA");
-                            encryptionCipher.init(Cipher.PUBLIC_KEY, partnerPublicKey);
-                            String encryptedMessage = Base64.getEncoder().encodeToString(
-                                                        encryptionCipher.doFinal(message.getBytes()));
-                            // Write to socket.
-                            out.println(rsaMessageHeader + '\n' + 
-                                        encryptedMessage + '\n' + rsaMessageFooter);
-                        }
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        sendMessages.start();
-
-        while (true) {
-            // Reads incoming messages from the socket, decrypts them and displays them on System.out
-            try {
-                // Read message.
-                String incomingMessage = readField(rsaMessageHeader, rsaMessageFooter);
-		if (verbose) {
-                    System.out.println("\n\nEncrypted message: \n" + incomingMessage + '\n');
-		}
-                
-                // Decrypt message.
-                Cipher decryptionCipher = Cipher.getInstance("RSA");
-                decryptionCipher.init(Cipher.PRIVATE_KEY, keys.getPrivate());
-                String decryptedMessage = new String(decryptionCipher.doFinal(Base64.getDecoder().decode(
-                                                     incomingMessage)));
-		if (verbose) {
-                    System.out.print("Decrypted message: \n"
-                          + clientSocket.getRemoteSocketAddress().toString() + ": " +
-                                                                decryptedMessage + '\n');
-		} else {
-                    System.out.print(clientSocket.getRemoteSocketAddress().toString() + ": " +
-                                      decryptedMessage + '\n');
-		}
-
-            } catch (Exception e) {
-                System.exit(0);
-            }
-        }
-    }
-
-    private static String readField(String header, String footer) throws Exception{
+    private String readField(BufferedReader inStream) throws Exception{
         String line;
         String textField = "";
         boolean read = false;
+        String rsaKeyHeader = Node.this.rsaKeyHeader;
+        String rsaKeyFooter = Node.this.rsaKeyFooter;
+        String rsaMessageHeader = Node.this.rsaMessageHeader;
+        String rsaMessageFooter = Node.this.rsaMessageFooter;
 
         // Read the given header and footer.
         while (true) {
-            line = in.readLine();
-            if (line.equals(footer)) {
+            line = inStream.readLine();
+            if (line.equals(rsaKeyFooter) || line.equals(rsaMessageFooter)) {
                 break;
-            } else if (line.equals(header)) {
+            } else if (line.equals(rsaKeyHeader) || line.equals(rsaMessageHeader)) {
                 read = true;
             } else if (read) {
                 if (textField != "") {
