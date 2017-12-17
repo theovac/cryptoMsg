@@ -28,22 +28,14 @@ import javax.crypto.Cipher;
  */
 public class Node {
     public static KeyPair keys;
-    private static ServerSocket serverSocket;
-    private static Socket inClientSocket; // Socket created by accepting a connection request.
-    private static Socket outClientSocket; // Socket created by making a connection request.
-    private static BufferedReader in;
-    private static PrintWriter out;
-    private static boolean interrupt = false;
     private static boolean clientSessionStarted = false;
     private static boolean serverSessionStarted = false;
-    private static Queue<String> userInputLines = new ConcurrentLinkedQueue<>();
     private static Queue<String> input = new ConcurrentLinkedQueue<>();
     private static String rsaKeyHeader = "-----BEGIN RSA PUBLIC KEY-----";
     private static String rsaKeyFooter = "-----END RSA PUBLIC KEY-----";
     private static String rsaMessageHeader = "-----BEGIN ENCRYPTED MESSAGE-----";
     private static String rsaMessageFooter = "-----END ENCRYPTED MESSAGE-----";
     private PublicKey partnerPublicKey;
-    private static boolean verbose = false;
 
     public Node(int serverPort) throws Exception{
         this.keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
